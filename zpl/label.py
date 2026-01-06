@@ -10,7 +10,7 @@ import PIL.ImageOps
 import math
 import os.path
 
-from zpl.utils import compress_zpl_data
+from .utils import compress_zpl_data
 try:
     from urllib.request import urlopen
 except ImportError:
@@ -75,6 +75,16 @@ class Label:
         
         assert (value >= 0 and value <= 30), "The value must be between 0 and 30"
         self.code += "~SD" + str(value)
+    
+    def set_speed(self, value):
+        """
+        Sets the print speed of the label printer. The value input is integer between 2 - 6,
+        which corresponds to (2 = 2 inches per second) or (6 = 6 inches per second).
+        """
+        assert (isinstance(value, int)), "The value must be an integer"
+        
+        assert (value >= 2 and value <= 6), "The value must be between 2 and 6"
+        self.code += "^PR" + str(value)
 
     def zpl_raw(self, commands):
         """
@@ -118,6 +128,30 @@ class Label:
         
         if justification == 'C':
             self.code += r"\&"
+    
+    def text(self, text, char_height=None, char_width=None, font='0', orientation='N',
+                   line_width=None, max_line=1, line_spaces=0, justification='L', hanging_indent=0, qrcode=False):
+        if char_height and char_width and font and orientation:
+            assert orientation in 'NRIB', "invalid orientation"
+            if re.match(r'^[A-Z0-9]$', font):
+                self.code += "^A%c%c,%i,%i" % (font, orientation, char_height*self.dpmm,
+                                               char_width*self.dpmm)
+            elif re.match(r'[REBA]?:[A-Z0-9\_]+\.(FNT|TTF|TTE)', font):
+                self.code += "^A@%c,%i,%i,%s" % (orientation, char_height*self.dpmm,
+                                               char_width*self.dpmm, font)
+            else:
+                raise ValueError("Invalid font.")
+        if line_width:
+            assert justification in "LCRJ", "invalid justification"
+            self.code += "^FB%i,%i,%i,%c,%i" % (line_width*self.dpmm, max_line, line_spaces,
+                                                justification, hanging_indent)
+        if qrcode:
+            self.code += "^FDQA,%s" % text
+        else:
+            self.code += "^FD%s" % text
+        
+        if justification == 'C':
+            self.code += r"\&"
 
     def set_default_font(self, height, width, font='0'):
         """
@@ -127,6 +161,15 @@ class Label:
         """
         assert re.match(r'[A-Z0-9]', font), "invalid font"
         self.code += "^CF%c,%i,%i" % (font, height*self.dpmm, width*self.dpmm)
+
+    def set_default_orientation(self, orientation):
+        """
+        Sets the default orientation from here onward.
+
+        *orientation* is one of 'N', 'R', 'I', 'B'
+        """
+        assert orientation in 'NRIB', "invalid orientation"
+        self.code += "^FW" + orientation
 
     def change_international_font(self, character_set=28, remaps=[]):
         """
